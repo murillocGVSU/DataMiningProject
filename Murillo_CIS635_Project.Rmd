@@ -1,0 +1,228 @@
+---
+title: "Murillo_CIS635_Project"
+author: "Cleyde Murillo Jr"
+date: "4/17/2021"
+output: html_document
+---
+```{r, message = FALSE}
+library(tidyverse)
+library(ggcorrplot)
+library(reshape2)
+library(gridExtra)
+library(e1071)
+library(rpart)
+library(lattice)
+library(caret)
+library(rpart.plot)
+library(ggfortify)
+```
+
+First we begin by merging the sources together, preceded by munging the data via outliers, missing values, and ambiguity.
+
+```{r}
+trainA <- read.csv('dataTrainA.txt', header = TRUE, sep = '\t')
+trainB <- read.csv('dataTrainB.txt', header = TRUE, sep = '\t')
+train <- merge(trainA, trainB, by = 'id')
+train <- train[order(train$id), -13]
+
+testA <- read.csv('dataTestA.txt', header = TRUE, sep = '\t')
+testB <- read.csv('dataTestB.txt', header = TRUE, sep = '\t')
+test <- merge(testA, testB, by = 'id')
+test <- test[order(test$id), -13]
+
+```
+
+By summarizing the data we can point out the attributes with outliers and missing values. Take note on: temp, bySys, vo2, throat, headA, runny, nausea, & diarrhea.
+
+```{r}
+summary(train)
+```
+
+In this case, we will replace all NA values with the median of their columns, then remove the outliers in the data.
+
+```{r, message = FALSE}
+nas <- train[rowSums(is.na(train)) > 0,]
+outliers <- subset(train, (train$temp < 90) | (train$temp > 106) | (train$bpSys < 90) | (train$bpSys > 150) | (train$vo2 < 10) | 
+                          (train$vo2 > 70) | (train$throat < 80) | (train$throat > 120) | (train$headA > 9) | (train$bodyA > 9) | (train$nausea > 1))
+#Replaces NAs with medians
+train <- train %>% 
+   mutate_all(~ifelse(is.na(.), median(., na.rm = TRUE), .))
+
+#Remove observations with outliers
+train <- anti_join(train, outliers)
+```
+
+In this part we want to get a feel for how each variable looks after cleaning. We will follow through with visualizations of distributions, correlations, and plots.
+
+```{r, message = FALSE}
+#Excluding ID
+melt.train <- melt(train[,-1])
+
+ggplot(melt.train, aes(x = value, fill = variable)) +
+      stat_density(show.legend = FALSE) +
+      facet_wrap(~variable, scales = 'free')
+```
+
+```{r}
+r <- cor(train[,-1], use = 'complete.obs')
+ggcorrplot(r, hc.order = TRUE, type = 'lower', lab = TRUE)
+```
+
+```{r}
+p1 <- ggplot(train, aes(atRisk.x, temp, color = temp < 98.6)) +
+  geom_point()
+p2 <- ggplot(train, aes(atRisk.x, headA,  color = atRisk.x)) +
+  geom_point()
+p3 <- ggplot(train, aes(atRisk.x, vo2,  color = atRisk.x)) +
+  geom_point()
+p4 <- ggplot(train, aes(atRisk.x, bpSys,  color = atRisk.x)) +
+  geom_point()
+
+grid.arrange(p1, p2, p3, p4, ncol = 2,
+             top = 'Highest Risk Correlations')
+```
+Classifiers: Decision Tree, SVM, Naive Bayes
+(Selection - Decision Trees)
+Calculations for Accuracy, Recall (Sensitivity), Precision (Pos Pred Value)
+
+```{r}
+#Naive Bayes
+nb <- naiveBayes(atRisk.x ~., train)
+pnb <- predict(nb, test[,-6])
+nbx <- table(true = test$atRisk.x, predict = pnb)
+confusionMatrix(nbx)
+
+#Decision Trees
+
+for(i in c(6:12)){
+  train[,i] <- as.factor(train[,i])
+  test[,i] <- as.factor(test[,i])
+}
+
+dt <- rpart(atRisk.x ~ . -id, data = train)
+pred <- predict(dt, test, type = 'class')
+dtx <- table(true = pred, predict = test$atRisk.x)
+confusionMatrix(dtx)
+rpart.plot(dt, extra = 104, nn = TRUE)
+qt <- cbind(test,pred)
+
+#Support Vector Machines
+svmtrain <- train[c(2:5,7:12,6)]
+svmtest <- test[c(2:5,7:12,6)]
+for(i in c(1:10)){
+  svmtrain[,i] <- as.numeric(svmtrain[,i])
+  svmtest[,i] <- as.numeric(svmtest[,i])
+}
+
+
+svmfit <- svm(atRisk.x ~ ., data = svmtrain, kernel = 'polynomial', scale = TRUE)
+predlin <- predict(svmfit, svmtest[,c(1:10)])
+svx <- table(true = svmtest[,11], predict = predlin)
+confusionMatrix(svx)
+```
+
+```{r, message = FALSE}
+trainA <- read.csv('dataTrainA.txt', header = TRUE, sep = '\t')
+trainB <- read.csv('dataTrainB.txt', header = TRUE, sep = '\t')
+testA <- read.csv('dataTestA.txt', header = TRUE, sep = '\t')
+testB <- read.csv('dataTestB.txt', header = TRUE, sep = '\t')
+
+WeeklyAnalysis <- function(srcA, srcB, srcC, srcD){
+  
+library(tidyverse)
+library(ggcorrplot)
+library(reshape2)
+library(gridExtra)
+library(e1071)
+library(rpart)
+library(lattice)
+library(caret)
+library(rpart.plot)
+library(ggfortify)
+library(ggthemes)
+
+  train <- merge(srcA, srcB, by = 'id')
+  train <- train[order(train$id), -13]
+
+  test <- merge(srcC, srcD, by = 'id')
+  test <- test[order(test$id), -13]
+  
+  outliers <- subset(train, 
+                    (train$temp < 90) | (train$temp > 106) | (train$bpSys < 90) | (train$bpSys > 150) | (train$vo2 < 10) | 
+                    (train$vo2 > 70) | (train$throat < 80) | (train$throat > 120) | (train$headA > 9) | (train$bodyA > 9))
+  
+  #Replaces NAs with medians
+  train <- train %>% 
+   mutate_all(~ifelse(is.na(.), median(., na.rm = TRUE), .))
+
+  #Remove outliers
+  train <- anti_join(train, outliers)
+  
+  #Convert to Factors
+  for(i in c(6:12)){
+  train[,i] <- as.factor(train[,i])
+  test[,i] <- as.factor(test[,i])
+  }
+  
+  #Model + Tree Plot
+  dt <- rpart(atRisk.x ~ . -id, data = train)
+  pred <- predict(dt, test, type = 'class')
+  dtx <- table(true = pred, predict = test$atRisk.x)
+  confusionMatrix(dtx)
+  qt <- cbind(test,pred)
+  qt <- qt[,c(1:5,7:12,6,13)]
+  
+  qt <- qt %>%
+    mutate(Status = if_else(atRisk.x == pred, 'Correct', 'Incorrect'))
+    qt$Status <- as.factor(qt$Status)
+    
+  #Plots
+  b1 <- ggplot(qt, aes(x = temp, y = headA, color = Status)) + 
+    ggtitle('Predicted Virus Risk') +
+    ylab('Head Ache Score') +
+    xlab('Body Temperature') +
+    geom_point() +
+    scale_color_manual(values = c("#4699DD",'#C93232'))
+    theme_economist()
+  
+  qtt <- confusionMatrix(pred, test$atRisk.x)
+  ct <- qtt$table
+  
+  #Textfile, PNGs
+  write.csv(qt, file = 'PredictedData.txt', col.names = TRUE, row.names = FALSE)
+  
+  png('Tree_Plot.png')
+  rpart.plot(dt, extra = 104, nn = TRUE)
+  ggsave('PredictedDataBarPlot.png', plot = b1)
+  ggsave('FourFoldPlot_ConfusionMatrix.png', plot = fourfoldplot(ct, color = c("#CC6666", "#99CC99"),
+             conf.level = 0, margin = 1, main = "Confusion Matrix"))
+  dev.off()
+  
+}
+
+WeeklyAnalysis(trainA, trainB, testA, testB)
+
+
+```
+
+```{r}
+x <- rbind(train, test)
+x <- x[order(x$id),-1]
+km <- kmeans(x, 4)
+
+
+for(i in c(1:11)){
+  x[,i] <- as.numeric(x[,i])
+}
+
+autoplot(km, x, frame = TRUE)
+km$size
+
+x$cluster <- km$cluster
+
+summary(x[x$cluster == 1, ])
+summary(x[x$cluster == 2, ])
+summary(x[x$cluster == 3, ])
+summary(x[x$cluster == 4, ])
+
+```
