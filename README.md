@@ -8,8 +8,8 @@ Modeling & Model Testing \
 Predictive Assessment \
 Automation & Reporting
 
-## Visuals
-Rather than running the functions the visualizations are provided for insight to what weekly output would look like.
+## Visuals / Output
+Rather than running the functions the visualizations/output are provided for insight to what weekly output would be (.png files/PredictedData.txt)
 
 ## Data Sources
 There are 4 data sources (.txt files) used for this project:\
